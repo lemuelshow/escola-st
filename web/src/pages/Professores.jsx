@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { Badge, Campo, Estado, Modal, useApi, useForm, useToast } from '../components/ui.jsx';
+import { Badge, Campo, Estado, Modal, Paginacao, useApi, useForm, usePaginacao, useToast } from '../components/ui.jsx';
 
 export default function Professores() {
   const { data, erro, carregando, recarregar } = useApi('/professores');
   const [edit, setEdit] = useState(null);
   const [atrib, setAtrib] = useState(null);
+  const pag = usePaginacao(data);
 
   return (
     <>
@@ -18,7 +19,7 @@ export default function Professores() {
           <table>
             <thead><tr><th>Nome</th><th>E-mail (login)</th><th>Turmas / disciplinas</th><th>Status</th><th></th></tr></thead>
             <tbody>
-              {data?.map((p) => (
+              {pag.itens?.map((p) => (
                 <tr key={p.id}>
                   <td>{p.nome}<br /><small>{p.telefone}</small></td>
                   <td>{p.email}</td>
@@ -37,6 +38,7 @@ export default function Professores() {
             </tbody>
           </table>
         </div>
+        <Paginacao {...pag} />
       </Estado>
       {edit && <Form inicial={edit} onClose={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
       {atrib && <Atribuicoes prof={atrib} onClose={() => setAtrib(null)} onSalvo={() => { setAtrib(null); recarregar(); }} />}

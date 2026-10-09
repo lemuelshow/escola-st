@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { Badge, Campo, Estado, Modal, useApi, useForm, useToast } from '../components/ui.jsx';
+import { Badge, Campo, Estado, Modal, Paginacao, useApi, useForm, usePaginacao, useToast } from '../components/ui.jsx';
 
 export const TURNOS = ['Matutino', 'Vespertino', 'Noturno', 'Integral'];
 export const NIVEIS = ['Educação Infantil', 'Ensino Fundamental - Anos Iniciais', 'Ensino Fundamental - Anos Finais', 'Ensino Médio', 'EJA'];
@@ -12,6 +12,7 @@ export default function Turmas() {
   const cfg = useApi('/config').data;
   const [nova, setNova] = useState(null);
   const nav = useNavigate();
+  const pag = usePaginacao(data, [ano]);
 
   return (
     <>
@@ -27,7 +28,7 @@ export default function Turmas() {
           <table>
             <thead><tr><th>Turma</th><th>Série / ano</th><th>Turno</th><th>Ano letivo</th><th className="num">Alunos</th><th className="num">Disciplinas</th><th></th></tr></thead>
             <tbody>
-              {data?.map((t) => (
+              {pag.itens?.map((t) => (
                 <tr key={t.id} className="clicavel" onClick={() => nav(`/turmas/${t.id}`)}>
                   <td><b>{t.nome}</b><br /><small>{t.nivel}</small></td>
                   <td>{t.serie}</td><td>{t.turno}</td><td>{t.ano_letivo}</td>
@@ -38,6 +39,7 @@ export default function Turmas() {
             </tbody>
           </table>
         </div>
+        <Paginacao {...pag} />
       </Estado>
       {nova && <TurmaForm inicial={nova} onClose={() => setNova(null)} onSalvo={(id) => { setNova(null); recarregar(); if (id) nav(`/turmas/${id}`); }} />}
     </>

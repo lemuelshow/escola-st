@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, hoje, qs } from '../api.js';
-import { Badge, Campo, Estado, Modal, useApi, useForm, useToast } from '../components/ui.jsx';
+import { Badge, Campo, Estado, Modal, Paginacao, useApi, useForm, usePaginacao, useToast } from '../components/ui.jsx';
 
 const TIPOS = { entrada: ['Entrada', 'verde'], saida: ['Saída', 'azul'], negado: ['Negado', 'vermelho'], nao_identificado: ['Não identificado', 'amarelo'], outro: ['Outro', 'cinza'] };
 
@@ -29,6 +29,7 @@ function Painel() {
   const acessos = useApi(`/catraca/acessos${qs(f)}`);
   const turmas = useApi('/turmas').data;
   const [coletando, setColetando] = useState(false);
+  const pagAcessos = usePaginacao(acessos.data, [f.de, f.ate, f.tipo, f.turma_id], 25);
 
   // atualiza a tela periodicamente
   useEffect(() => {
@@ -91,7 +92,7 @@ function Painel() {
           <table>
             <thead><tr><th>Data/hora</th><th>Aluno</th><th>Tipo</th><th>Evento</th><th>Equipamento</th></tr></thead>
             <tbody>
-              {acessos.data?.map((a) => (
+              {pagAcessos.itens?.map((a) => (
                 <tr key={a.id}>
                   <td>{new Date(a.data_hora.replace(' ', 'T')).toLocaleString('pt-BR')}</td>
                   <td>{a.aluno_id ? <Link to={`/alunos/${a.aluno_id}`}>{a.aluno}</Link> : <small>—</small>}</td>
@@ -103,6 +104,7 @@ function Painel() {
             </tbody>
           </table>
         </div>
+        <Paginacao {...pagAcessos} />
       </Estado>
     </>
   );
@@ -115,6 +117,7 @@ function AlunosCatraca() {
   const turmas = useApi('/turmas').data;
   const { data, carregando, erro, recarregar } = useApi(`/catraca/alunos${qs({ q, turma_id: turma })}`);
   const [ocupado, setOcupado] = useState(null);
+  const pag = usePaginacao(data, [q, turma]);
 
   const sincronizar = async (corpo, rotulo) => {
     setOcupado(rotulo);
@@ -157,7 +160,7 @@ function AlunosCatraca() {
           <table>
             <thead><tr><th></th><th>Aluno</th><th>Turma</th><th>Foto</th><th>Sincronização</th><th>Hoje</th><th>Acesso</th><th></th></tr></thead>
             <tbody>
-              {data?.map((a) => {
+              {pag.itens?.map((a) => {
                 const [tipo, hora] = (a.ultimo_hoje || '').split('|');
                 return (
                   <tr key={a.id}>
@@ -182,6 +185,7 @@ function AlunosCatraca() {
             </tbody>
           </table>
         </div>
+        <Paginacao {...pag} />
       </Estado>
     </>
   );

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { api } from '../api.js';
-import { Campo, Estado, Modal, useApi, useForm, useToast } from '../components/ui.jsx';
+import { Campo, Estado, Modal, Paginacao, useApi, useForm, usePaginacao, useToast } from '../components/ui.jsx';
 
 export default function Disciplinas() {
   const { data, erro, carregando, recarregar } = useApi('/disciplinas');
   const [edit, setEdit] = useState(null);
   const toast = useToast();
+  const pag = usePaginacao(data);
 
   const excluir = async (d) => {
     if (!confirm(`Excluir a disciplina ${d.nome}?`)) return;
@@ -23,7 +24,7 @@ export default function Disciplinas() {
           <table>
             <thead><tr><th>Ordem</th><th>Disciplina</th><th className="num">Carga horária anual</th><th></th></tr></thead>
             <tbody>
-              {data?.map((d) => (
+              {pag.itens?.map((d) => (
                 <tr key={d.id}>
                   <td>{d.ordem}</td><td>{d.nome}</td><td className="num">{d.carga_horaria}h</td>
                   <td className="acoes" style={{ justifyContent: 'flex-end' }}>
@@ -35,6 +36,7 @@ export default function Disciplinas() {
             </tbody>
           </table>
         </div>
+        <Paginacao {...pag} />
       </Estado>
       {edit && <Form inicial={edit} onClose={() => setEdit(null)} onSalvo={() => { setEdit(null); recarregar(); }} />}
     </>

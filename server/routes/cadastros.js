@@ -60,13 +60,82 @@ r.get('/dashboard', wrap((req, res) => {
   const hoje = new Date().toLocaleDateString('sv-SE');
   if (req.user.papel === 'gestor') {
     const c = (sql, ...p) => db.prepare(sql).get(...p).n;
+    const cfg = getConfig();
+    const media = Number(cfg.media_aprovacao) || 6;
+    const freqMin = Number(cfg.frequencia_minima) || 75;
+    const alunos = c('SELECT COUNT(*) n FROM alunos WHERE ativo = 1');
+
+    // últimos 10 dias úteis (seg–sex), do mais antigo para o mais recente
+    const dias = [];
+    for (const d = new Date(); dias.length < 10; d.setDate(d.getDate() - 1)) {
+      if (d.getDay() % 6) dias.unshift(d.toLocaleDateString('sv-SE'));
+    }
+    const entradasDia = new Map(db.prepare(`
+      SELECT substr(data_hora,1,10) dia, COUNT(DISTINCT aluno_id) n FROM acessos
+      WHERE tipo = 'entrada' AND aluno_id IS NOT NULL AND substr(data_hora,1,10) >= ? GROUP BY dia`).all(dias[0]).map((x) => [x.dia, x.n]));
+
+    // frequência por dia letivo (diário de classe), ponderada pela quantidade de aulas
+    const frequenciaDiaria = db.prepare(`
+      SELECT a.data AS dia, ROUND(100.0 * SUM(CASE WHEN f.presente = 1 THEN a.quantidade ELSE 0 END) / SUM(a.quantidade), 1) AS pct
+      FROM frequencias f JOIN aulas a ON a.id = f.aula_id
+      GROUP BY a.data ORDER BY a.data DESC LIMIT 30`).all().reverse();
+
+    // indicadores por matrícula ativa: média das notas lançadas e frequência
+    const porMatricula = db.prepare(`
+      SELECT m.id, al.id AS aluno_id, al.nome, t.id AS turma_id, t.nome AS turma,
+        (SELECT AVG(MAX(COALESCE(n.nota, 0), COALESCE(n.recuperacao, 0))) FROM notas n
+          WHERE n.matricula_id = m.id AND n.bimestre <= 4 AND (n.nota IS NOT NULL OR n.recuperacao IS NOT NULL)) AS media,
+        (SELECT 100.0 * SUM(CASE WHEN f.presente = 1 THEN a.quantidade ELSE 0 END) / NULLIF(SUM(a.quantidade), 0)
+          FROM frequencias f JOIN aulas a ON a.id = f.aula_id WHERE f.matricula_id = m.id) AS freq
+      FROM matriculas m JOIN turmas t ON t.id = m.turma_id JOIN alunos al ON al.id = m.aluno_id
+      WHERE m.situacao = 'cursando' AND t.ativo = 1 AND al.ativo = 1`).all();
+
+    const r1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
+    const avg = (xs) => { const v = xs.filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+
+    const desempenho = { acima: 0, atencao: 0, abaixo: 0, semNotas: 0 };
+    for (const m of porMatricula) {
+      if (m.media == null) desempenho.semNotas++;
+      else if (m.media >= media) desempenho.acima++;
+      else if (m.media >= media - 1) desempenho.atencao++;
+      else desempenho.abaixo++;
+    }
+
+    const turmasMap = new Map();
+    for (const m of porMatricula) {
+      if (!turmasMap.has(m.turma_id)) turmasMap.set(m.turma_id, { id: m.turma_id, turma: m.turma, alunos: 0, medias: [], freqs: [] });
+      const t = turmasMap.get(m.turma_id);
+      t.alunos++; t.medias.push(m.media); t.freqs.push(m.freq);
+    }
+    const turmas = [...turmasMap.values()]
+      .map((t) => ({ id: t.id, turma: t.turma, alunos: t.alunos, media: r1(avg(t.medias)), frequencia: r1(avg(t.freqs)) }))
+      .sort((a, b) => a.turma.localeCompare(b.turma, 'pt-BR'));
+
+    const emAtencao = porMatricula
+      .filter((m) => (m.media != null && m.media < media) || (m.freq != null && m.freq < freqMin))
+      .map((m) => ({ aluno_id: m.aluno_id, nome: m.nome, turma: m.turma, media: r1(m.media), frequencia: r1(m.freq) }))
+      .sort((a, b) => (a.media ?? 99) - (b.media ?? 99))
+      .slice(0, 8);
+
     res.json({
-      alunos: c('SELECT COUNT(*) n FROM alunos WHERE ativo = 1'),
-      turmas: c('SELECT COUNT(*) n FROM turmas WHERE ativo = 1'),
+      alunos,
+      turmasAtivas: c('SELECT COUNT(*) n FROM turmas WHERE ativo = 1'),
       professores: c("SELECT COUNT(*) n FROM usuarios WHERE papel = 'professor' AND ativo = 1"),
       semTurma: c('SELECT COUNT(*) n FROM alunos a WHERE ativo = 1 AND NOT EXISTS (SELECT 1 FROM matriculas m JOIN turmas t ON t.id = m.turma_id WHERE m.aluno_id = a.id AND t.ativo = 1)'),
-      entradasHoje: c("SELECT COUNT(DISTINCT aluno_id) n FROM acessos WHERE tipo = 'entrada' AND aluno_id IS NOT NULL AND substr(data_hora,1,10) = ?", hoje),
+      entradasHoje: entradasDia.get(hoje) || 0,
       aulasHoje: c('SELECT COUNT(*) n FROM aulas WHERE data = ?', hoje),
+      frequenciaGeral: r1(avg(porMatricula.map((m) => m.freq))),
+      mediaGeral: r1(avg(porMatricula.map((m) => m.media))),
+      mediaAprovacao: media,
+      frequenciaMinima: freqMin,
+      entradasDias: dias.map((dia) => ({ dia, n: entradasDia.get(dia) || 0 })),
+      frequenciaDiaria,
+      desempenho,
+      turmas,
+      emAtencao,
+      ultimosAcessos: db.prepare(`
+        SELECT x.id, x.data_hora, x.tipo, x.aluno_id, a.nome AS aluno FROM acessos x
+        LEFT JOIN alunos a ON a.id = x.aluno_id ORDER BY x.data_hora DESC LIMIT 8`).all(),
       semProfessor: db.prepare(`
         SELECT t.nome AS turma, d.nome AS disciplina FROM turma_disciplinas td
         JOIN turmas t ON t.id = td.turma_id JOIN disciplinas d ON d.id = td.disciplina_id

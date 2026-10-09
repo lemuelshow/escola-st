@@ -71,7 +71,7 @@ export default function App() {
     <UserCtx.Provider value={user}>
       <div className="app">
         <aside className={`lateral ${menuAberto ? 'aberto' : ''}`}>
-          <div className="marca">Gestão Escolar</div>
+          <div className="marca"><img src="/logo.png" alt="Centro Educacional Futuro" /></div>
           <nav>
             {MENU.filter((m) => m.papeis.includes(user.papel)).map((m) => (
               <NavLink key={m.to} to={m.to} end={m.to === '/'}>

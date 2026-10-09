@@ -93,3 +93,55 @@ export function useForm(inicial) {
   });
   return [v, setV, bind];
 }
+
+/* ---------- Paginação (no cliente) ---------- */
+export function usePaginacao(lista, reset = [], tamanhoInicial = 15) {
+  const [pagina, setPagina] = useState(1);
+  const [tamanho, setTamanho] = useState(tamanhoInicial);
+  const total = lista?.length || 0;
+  const paginas = Math.max(1, Math.ceil(total / tamanho));
+  // volta para a 1ª página quando os filtros mudam
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setPagina(1), reset);
+  const atual = Math.min(pagina, paginas);
+  const itens = lista ? lista.slice((atual - 1) * tamanho, atual * tamanho) : lista;
+  const mudarTamanho = (n) => { setTamanho(n); setPagina(1); };
+  return { itens, pagina: atual, paginas, total, tamanho, setPagina, setTamanho: mudarTamanho };
+}
+
+function faixaPaginas(atual, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const p = new Set([1, total, atual - 1, atual, atual + 1]);
+  const out = [];
+  [...p].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b).forEach((n, i, arr) => {
+    if (i && n - arr[i - 1] > 1) out.push('…' + n);
+    out.push(n);
+  });
+  return out;
+}
+
+export function Paginacao({ pagina, paginas, total, tamanho, setPagina, setTamanho, opcoes = [10, 15, 25, 50] }) {
+  if (!total) return null;
+  const ini = (pagina - 1) * tamanho + 1;
+  const fim = Math.min(total, pagina * tamanho);
+  return (
+    <div className="paginacao">
+      <span className="paginacao-info">Mostrando <b>{ini}–{fim}</b> de <b>{total}</b></span>
+      <label className="paginacao-tamanho">
+        Por página
+        <select value={tamanho} onChange={(e) => setTamanho(Number(e.target.value))}>
+          {opcoes.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      {paginas > 1 && (
+        <nav className="paginacao-botoes" aria-label="Paginação">
+          <button type="button" disabled={pagina === 1} onClick={() => setPagina(pagina - 1)} aria-label="Página anterior">‹</button>
+          {faixaPaginas(pagina, paginas).map((n) => typeof n === 'string'
+            ? <span key={n} className="paginacao-reticencias">…</span>
+            : <button type="button" key={n} className={n === pagina ? 'ativa' : ''} aria-current={n === pagina ? 'page' : undefined} onClick={() => setPagina(n)}>{n}</button>)}
+          <button type="button" disabled={pagina === paginas} onClick={() => setPagina(pagina + 1)} aria-label="Próxima página">›</button>
+        </nav>
+      )}
+    </div>
+  );
+}

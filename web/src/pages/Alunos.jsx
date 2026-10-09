@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fmtData, qs } from '../api.js';
-import { Badge, Campo, Estado, useApi } from '../components/ui.jsx';
+import { Badge, Campo, Estado, Paginacao, useApi, usePaginacao } from '../components/ui.jsx';
 
 export default function Alunos() {
   const [q, setQ] = useState('');
@@ -10,6 +10,7 @@ export default function Alunos() {
   const turmas = useApi('/turmas').data;
   const { data, erro, carregando } = useApi(`/alunos${qs({ q, turma_id: turma, ativo: inativos ? 'todos' : '' })}`);
   const nav = useNavigate();
+  const pag = usePaginacao(data, [q, turma, inativos]);
 
   return (
     <>
@@ -34,7 +35,7 @@ export default function Alunos() {
           <table>
             <thead><tr><th></th><th>Nome</th><th>Matrícula</th><th>Nascimento</th><th>Turma</th><th>Responsável</th><th>Catraca</th></tr></thead>
             <tbody>
-              {data?.map((a) => (
+              {pag.itens?.map((a) => (
                 <tr key={a.id} className="clicavel" onClick={() => nav(`/alunos/${a.id}`)}>
                   <td style={{ width: 46 }}>{a.foto ? <img className="foto-mini" src={`/api/alunos/${a.id}/foto`} alt="" loading="lazy" /> : <span className="foto-mini" style={{ display: 'inline-block' }} />}</td>
                   <td>{a.nome} {!a.ativo && <Badge>Inativo</Badge>}</td>
@@ -53,6 +54,7 @@ export default function Alunos() {
             </tbody>
           </table>
         </div>
+        <Paginacao {...pag} />
       </Estado>
     </>
   );
