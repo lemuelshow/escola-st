@@ -195,3 +195,7 @@ video.camera { width: 100%; max-width: 480px; border-radius: 8px; background: #0
   .folha:last-child { page-break-after: auto; }
 }
 @media print { .folha.paisagem { page: paisagem; } @page paisagem { size: A4 landscape; margin: 0; } }
+
+/* células de ação continuam sendo células de tabela (flex quebrava a borda) */
+td.acoes { display: table-cell; text-align: right; white-space: nowrap; }
+td.acoes > * + * { margin-left: 6px; }
