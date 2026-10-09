@@ -6,21 +6,42 @@ para impressão; integração com catraca facial Control iD.
 
 ## Como rodar
 
-Requisito: **Node.js 22.5 ou superior** (o banco é SQLite nativo do Node, sem instalar nada a mais).
+Requisitos: **Node.js 22.9 ou superior** e um banco **PostgreSQL**.
 
-```bash
-npm install
-npm run build     # gera a interface (pasta dist/)
-npm start         # http://localhost:3001
-```
+1. Crie o arquivo `.env` na raiz (ele não vai para o git) com a conexão do banco:
 
-No Windows basta dar dois cliques em `iniciar.bat`.
+   ```
+   DATABASE_URL=postgresql://usuario:senha@servidor/banco
+   ```
+
+2. Instale, gere a interface e inicie:
+
+   ```bash
+   npm install
+   npm run build     # gera a interface (pasta dist/)
+   npm start         # http://localhost:3001
+   ```
+
+As tabelas são criadas sozinhas na primeira execução. No Windows basta dar dois cliques em `iniciar.bat`.
 
 Primeiro acesso: **admin@escola.com / admin123** — troque a senha em *Configurações*.
 
 Desenvolvimento com recarga automática: `npm run dev` (interface em http://localhost:5173).
 
-Os dados ficam em `data/` (`escola.db` + fotos). **Faça backup dessa pasta.**
+### Dados de demonstração
+
+`npm run seed` cria 10 professores, 2 turmas, 10 alunos, notas, chamadas e passagens na catraca
+(só roda com o banco sem alunos; `npm run seed -- --reset` apaga e recria). Professores entram com
+o próprio e-mail e a senha **prof123** (ex.: juliana.rocha@escola.com).
+
+### Publicar no Render
+
+- *Build command*: `npm install && npm run build`
+- *Start command*: `npm start`
+- Variável de ambiente `DATABASE_URL` com a *Internal Database URL* do PostgreSQL do Render.
+
+Todos os dados (inclusive fotos dos alunos e a chave das sessões) ficam no PostgreSQL; o disco do
+servidor pode ser apagado a cada deploy sem perda.
 
 ## Perfis
 

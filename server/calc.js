@@ -5,29 +5,31 @@ const r1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
 export const SITUACOES_ENCERRADAS = ['transferido', 'desistente', 'remanejado'];
 
 /** Notas por bimestre, médias, faltas e situação de uma matrícula. */
-export function boletim(matriculaId, cfg = getConfig()) {
-  const mat = db.prepare(`
+export async function boletim(matriculaId, cfg) {
+  cfg ||= await getConfig();
+  const mat = await db.get(`
     SELECT m.*, t.nome AS turma_nome, t.serie, t.nivel, t.turno, t.ano_letivo
-    FROM matriculas m JOIN turmas t ON t.id = m.turma_id WHERE m.id = ?`).get(matriculaId);
+    FROM matriculas m JOIN turmas t ON t.id = m.turma_id WHERE m.id = ?`, matriculaId);
   if (!mat) return null;
-  const aluno = db.prepare('SELECT * FROM alunos WHERE id = ?').get(mat.aluno_id);
   const media = Number(cfg.media_aprovacao) || 6;
   const freqMin = Number(cfg.frequencia_minima) || 75;
 
-  const disciplinas = db.prepare(`
+  const [aluno, disciplinas, notas, aulas, faltas] = await Promise.all([
+    db.get('SELECT * FROM alunos WHERE id = ?', mat.aluno_id),
+    db.all(`
     SELECT d.id, d.nome, d.carga_horaria, u.nome AS professor
     FROM turma_disciplinas td JOIN disciplinas d ON d.id = td.disciplina_id
     LEFT JOIN usuarios u ON u.id = td.professor_id
-    WHERE td.turma_id = ? ORDER BY d.ordem, d.nome`).all(mat.turma_id);
-
-  const notas = db.prepare('SELECT * FROM notas WHERE matricula_id = ?').all(matriculaId);
-  const aulas = db.prepare(`
+    WHERE td.turma_id = ? ORDER BY d.ordem, d.nome`, mat.turma_id),
+    db.all('SELECT * FROM notas WHERE matricula_id = ?', matriculaId),
+    db.all(`
     SELECT disciplina_id, bimestre, SUM(quantidade) AS total FROM aulas
-    WHERE turma_id = ? GROUP BY disciplina_id, bimestre`).all(mat.turma_id);
-  const faltas = db.prepare(`
+    WHERE turma_id = ? GROUP BY disciplina_id, bimestre`, mat.turma_id),
+    db.all(`
     SELECT a.disciplina_id, a.bimestre, SUM(a.quantidade) AS total
     FROM frequencias f JOIN aulas a ON a.id = f.aula_id
-    WHERE f.matricula_id = ? AND f.presente = 0 GROUP BY a.disciplina_id, a.bimestre`).all(matriculaId);
+    WHERE f.matricula_id = ? AND f.presente = 0 GROUP BY a.disciplina_id, a.bimestre`, matriculaId),
+  ]);
 
   const pick = (rows, d, b) => rows.find((x) => x.disciplina_id === d && x.bimestre === b);
   let totAulas = 0, totFaltas = 0;
@@ -82,8 +84,8 @@ export function boletim(matriculaId, cfg = getConfig()) {
 }
 
 export function matriculasDaTurma(turmaId) {
-  return db.prepare(`
+  return db.all(`
     SELECT m.id, m.numero, m.situacao, m.aluno_id, a.nome, a.matricula
     FROM matriculas m JOIN alunos a ON a.id = m.aluno_id
-    WHERE m.turma_id = ? ORDER BY COALESCE(m.numero, 9999), a.nome`).all(turmaId);
+    WHERE m.turma_id = ? ORDER BY COALESCE(m.numero, 9999), a.nome`, turmaId);
 }

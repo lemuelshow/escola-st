@@ -1,15 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { db, DATA_DIR } from './db.js';
+import { db, segredo } from './db.js';
 
-const secretFile = path.join(DATA_DIR, 'jwt.secret');
-const SECRET = process.env.JWT_SECRET || (() => {
-  if (!fs.existsSync(secretFile)) fs.writeFileSync(secretFile, crypto.randomBytes(48).toString('hex'));
-  return fs.readFileSync(secretFile, 'utf8');
-})();
+let SECRET = process.env.JWT_SECRET || null;
+const chave = async () => (SECRET ||= await segredo('jwt_secret'));
 
 function parseCookies(header = '') {
   const out = {};
@@ -20,15 +14,21 @@ function parseCookies(header = '') {
   return out;
 }
 
-export function login(req, res) {
-  const { email, senha } = req.body || {};
-  const u = db.prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1').get(String(email || '').trim().toLowerCase());
-  if (!u || !bcrypt.compareSync(String(senha || ''), u.senha_hash)) {
-    return res.status(401).json({ erro: 'E-mail ou senha inválidos' });
+export async function login(req, res) {
+  try {
+    const { email, senha } = req.body || {};
+    const u = await db.get('SELECT * FROM usuarios WHERE email = ? AND ativo = 1', String(email || '').trim().toLowerCase());
+    if (!u || !bcrypt.compareSync(String(senha || ''), u.senha_hash)) {
+      return res.status(401).json({ erro: 'E-mail ou senha inválidos' });
+    }
+    const token = jwt.sign({ id: u.id }, await chave(), { expiresIn: '12h' });
+    const seguro = req.secure || req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
+    res.setHeader('Set-Cookie', `token=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${12 * 3600}${seguro}`);
+    res.json({ id: u.id, nome: u.nome, email: u.email, papel: u.papel });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: 'Erro ao entrar. Tente novamente.' });
   }
-  const token = jwt.sign({ id: u.id }, SECRET, { expiresIn: '12h' });
-  res.setHeader('Set-Cookie', `token=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${12 * 3600}`);
-  res.json({ id: u.id, nome: u.nome, email: u.email, papel: u.papel });
 }
 
 export function logout(req, res) {
@@ -36,16 +36,21 @@ export function logout(req, res) {
   res.json({ ok: true });
 }
 
-export function auth(req, res, next) {
+export async function auth(req, res, next) {
+  let id;
   try {
-    const { token } = parseCookies(req.headers.cookie);
-    const { id } = jwt.verify(token, SECRET);
-    const u = db.prepare('SELECT id, nome, email, papel FROM usuarios WHERE id = ? AND ativo = 1').get(id);
-    if (!u) throw new Error();
+    ({ id } = jwt.verify(parseCookies(req.headers.cookie).token, await chave()));
+  } catch {
+    return res.status(401).json({ erro: 'Não autenticado' });
+  }
+  try {
+    const u = await db.get('SELECT id, nome, email, papel FROM usuarios WHERE id = ? AND ativo = 1', id);
+    if (!u) return res.status(401).json({ erro: 'Não autenticado' });
     req.user = u;
     next();
-  } catch {
-    res.status(401).json({ erro: 'Não autenticado' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: 'Erro de conexão com o banco' });
   }
 }
 
@@ -55,13 +60,13 @@ export function gestor(req, res, next) {
 }
 
 /** Gestor acessa tudo; professor só turma/disciplina atribuída a ele. */
-export function podeAcessar(user, turmaId, disciplinaId) {
+export async function podeAcessar(user, turmaId, disciplinaId) {
   if (user.papel === 'gestor') return true;
   if (disciplinaId == null) {
-    return !!db.prepare('SELECT 1 FROM turma_disciplinas WHERE turma_id = ? AND professor_id = ?').get(turmaId, user.id);
+    return !!(await db.get('SELECT 1 FROM turma_disciplinas WHERE turma_id = ? AND professor_id = ?', turmaId, user.id));
   }
-  return !!db.prepare('SELECT 1 FROM turma_disciplinas WHERE turma_id = ? AND disciplina_id = ? AND professor_id = ?')
-    .get(turmaId, disciplinaId, user.id);
+  return !!(await db.get('SELECT 1 FROM turma_disciplinas WHERE turma_id = ? AND disciplina_id = ? AND professor_id = ?',
+    turmaId, disciplinaId, user.id));
 }
 
 export function hashSenha(s) {

@@ -10,5 +10,5 @@ if not exist dist (
   call npm run build
 )
 echo Acesse http://localhost:3001  (ou http://IP-DESTE-PC:3001 nos outros computadores)
-node server/index.js
+node --env-file-if-exists=.env server/index.js
 pause

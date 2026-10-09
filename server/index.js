@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import './db.js';
+import { iniciarBanco } from './db.js';
 import { login, logout, auth, gestor } from './auth.js';
 import cadastros from './routes/cadastros.js';
 import diario from './routes/diario.js';
@@ -9,6 +9,7 @@ import documentos from './routes/documentos.js';
 import catraca, { iniciarColetaAutomatica } from './routes/catraca.js';
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '5mb' }));
 
 app.post('/api/auth/login', login);
@@ -27,6 +28,12 @@ if (fs.existsSync(dist)) {
 }
 
 const PORT = Number(process.env.PORT) || 3001;
+try {
+  await iniciarBanco();
+} catch (e) {
+  console.error('Falha ao conectar no PostgreSQL:', e.message);
+  process.exit(1);
+}
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Gestão Escolar rodando em http://localhost:${PORT}`);
   iniciarColetaAutomatica();
